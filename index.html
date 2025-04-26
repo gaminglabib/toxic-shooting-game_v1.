@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Toxic Shooting</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: linear-gradient(45deg, #ff5e62, #ff9966); font-family: 'Arial', sans-serif; overflow: hidden; }
+    #menu, #gameOverScreen {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      font-size: 30px;
+      z-index: 2;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 20px;
+      margin-top: 20px;
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      background: #00f2fe;
+      color: #000;
+      transition: 0.3s;
+    }
+    button:hover { background: #4facfe; }
+    canvas {
+      display: block;
+      margin: 20px auto;
+      background: linear-gradient(90deg, #00c3ff, #ffff1c);
+      border: 4px solid white;
+      border-radius: 15px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>Toxic Shooting</h1>
+  <button onclick="startGame()">Start Game</button>
+</div>
+
+<div id="gameOverScreen" style="display:none;">
+  <h1>Game Over</h1>
+  <button onclick="restartGame()">Restart</button>
+</div>
+
+<canvas id="gameCanvas" width="800" height="450"></canvas>
+
+<script>
+// Get elements
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const menu = document.getElementById("menu");
+const gameOverScreen = document.getElementById("gameOverScreen");
+
+// Sounds
+const shootSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-game-ball-tap-2073.wav");
+const hitSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-arcade-mechanical-bling-210.wav");
+const explosionSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-explosion-2759.wav");
+const bgMusic = new Audio("https://assets.mixkit.co/music/preview/mixkit-retro-arcade-funk-103.mp3");
+bgMusic.loop = true;
+bgMusic.volume = 0.4;
+
+// Variables
+let player, bullets, enemies, bosses, explosions, powerUps;
+let score, level, gameOver, enemySpeed, gameTimer, gameDuration;
+let keys = {};
+let shieldActive = false;
+let shieldTime = 0;
+let healthPackActive = false;
+
+// Player setup
+function initPlayer() {
+  player = { x: 50, y: canvas.height / 2 - 25, width: 50, height: 50, color: "lime", speed: 5, health: 3 };
+}
+function initVariables() {
+  bullets = [];
+  enemies = [];
+  bosses = [];
+  explosions = [];
+  powerUps = [];
+  score = 0;
+  level = 1;
+  gameOver = false;
+  enemySpeed = 3;
+  gameTimer = 0;
+  gameDuration = 600; // Game timer for Timer Challenge Mode
+}
+
+// Start / Restart Functions
+function startGame() {
+  menu.style.display = "none";
+  bgMusic.play();
+  initPlayer();
+  initVariables();
+  gameLoop();
+}
+function restartGame() {
+  gameOverScreen.style.display = "none";
+  bgMusic.play();
+  initPlayer();
+  initVariables();
+  gameLoop();
+}
+
+// Control
+document.addEventListener('keydown', e => keys[e.code] = true);
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+// Functions
+function drawPlayer() { ctx.fillStyle = player.color; ctx.fillRect(player.x, player.y, player.width, player.height); }
+function drawBullets() { ctx.fillStyle = "yellow"; bullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height)); }
+function drawEnemies() { ctx.fillStyle = "red"; enemies.forEach(e => ctx.fillRect(e.x, e.y, e.width, e.height)); }
+function drawBosses() { ctx.fillStyle = "purple"; bosses.forEach(boss => ctx.fillRect(boss.x, boss.y, boss.width, boss.height)); }
+function drawExplosions() {
+  explosions.forEach(ex => {
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, ex.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${ex.alpha})`;
+    ctx.fill();
+  });
+}
+function drawPowerUps() {
+  powerUps.forEach(p => {
+    ctx.fillStyle = "gold";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+function drawScore() { ctx.fillStyle = "white"; ctx.font = "20px Arial"; ctx.fillText(`Score: ${score}`, 10, 30); }
+function drawHealth() { ctx.fillStyle = "white"; ctx.font = "20px Arial"; ctx.fillText(`Health: ${player.health}`, canvas.width - 150, 30); }
+function drawLevel() { ctx.fillStyle = "white"; ctx.font = "20px Arial"; ctx.fillText(`Level: ${level}`, canvas.width / 2 - 30, 30); }
+function drawTimer() { 
+  const remainingTime = Math.max(0, gameDuration - gameTimer);
+  ctx.fillStyle = "white"; 
+  ctx.font = "20px Arial"; 
+  ctx.fillText(`Time Left: ${remainingTime}s`, canvas.width - 200, 30); 
+}
+
+function movePlayer() {
+  if (keys["ArrowUp"] && player.y > 0) player.y -= player.speed;
+  if (keys["ArrowDown"] && player.y + player.height < canvas.height) player.y += player.speed;
+}
+
+function shootBullet() {
+  const size = Math.random() < 0.3 ? 20 : 10; // 30% chance for bigger bullets
+  bullets.push({ x: player.x + player.width, y: player.y + player.height / 2 - size / 2, width: size, height: size, speed: 7 });
+  shootSound.currentTime = 0;
+  shootSound.play();
+}
+document.addEventListener("keydown", e => { if (e.code === "Space") shootBullet(); });
+
+function spawnEnemy() {
+  let size = 40;
+  let y = Math.random() * (canvas.height - size);
+  enemies.push({ x: canvas.width, y: y, width: size, height: size, speed: enemySpeed });
+}
+function spawnBoss() {
+  bosses.push({ x: canvas.width, y: Math.random() * (canvas.height - 100), width: 100, height: 100, speed: 2, health: 10 });
+}
+function spawnPowerUp() {
+  const powerUpTypes = ["shield", "health", "bigBullet"];
+  const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+  const x = Math.random() * canvas.width;
+  const y = Math.random() * canvas.height;
+  powerUps.push({ x, y, type });
+}
+
+function updateBullets() {
+  bullets.forEach(b => b.x += b.speed);
+  bullets = bullets.filter(b => b.x < canvas.width);
+}
+function updateEnemies() {
+  enemies.forEach(e => e.x -= e.speed);
+  enemies = enemies.filter(e => e.x + e.width > 0);
+}
+function updateBosses() {
+  bosses.forEach(boss => boss.x -= boss.speed);
+  bosses = bosses.filter(boss => boss.x + boss.width > 0);
+}
+function updatePowerUps() {
+  powerUps.forEach(p => p.y += 2);
+  powerUps = powerUps.filter(p => p.y < canvas.height);
+}
+
+function detectCollisions() {
+  // Bullet vs Enemy
+  bullets.forEach((b, bi) => {
+    enemies.forEach((e, ei) => {
+      if (b.x < e.x + e.width &&
